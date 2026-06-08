@@ -32,7 +32,7 @@ Before releasing, ensure all changes are documented in the `[Unreleased]` sectio
 
 ### 2. Trigger Release
 
-1. Go to the [Actions tab](https://github.com/SecDev-Lab/sprout/actions) in your GitHub repository
+1. Go to the [Actions tab](https://github.com/AgenticSec/sprout/actions) in your GitHub repository
 2. Click on "Release" workflow in the left sidebar
 3. Click "Run workflow" button
 4. Configure the release options:
