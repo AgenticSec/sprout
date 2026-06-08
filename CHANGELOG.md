@@ -122,15 +122,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI/CD pipeline with GitHub Actions
 - Support for Python 3.11, 3.12, and 3.13
 
-[Unreleased]: https://github.com/SecDev-Lab/sprout/compare/v0.7.0...HEAD
-[0.2.0]: https://github.com/SecDev-Lab/sprout/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/AgenticSec/sprout/compare/v0.7.0...HEAD
+[0.2.0]: https://github.com/AgenticSec/sprout/compare/v0.2.0...HEAD
 
-[0.3.0]: https://github.com/SecDev-Lab/sprout/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/AgenticSec/sprout/compare/v0.3.0...HEAD
 
-[0.4.0]: https://github.com/SecDev-Lab/sprout/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/AgenticSec/sprout/compare/v0.4.0...HEAD
 
-[0.5.0]: https://github.com/SecDev-Lab/sprout/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/AgenticSec/sprout/compare/v0.5.0...HEAD
 
-[0.6.0]: https://github.com/SecDev-Lab/sprout/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/AgenticSec/sprout/compare/v0.6.0...HEAD
 
-[0.7.0]: https://github.com/SecDev-Lab/sprout/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/AgenticSec/sprout/compare/v0.7.0...HEAD

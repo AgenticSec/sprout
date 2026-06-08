@@ -7,7 +7,7 @@
 pip install sprout
 
 # Development installation
-git clone https://github.com/SecDev-Lab/sprout.git
+git clone https://github.com/AgenticSec/sprout.git
 cd sprout
 pip install -e ".[dev]"
 ```

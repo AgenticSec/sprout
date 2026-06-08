@@ -218,8 +218,8 @@ jobs:
           
           # Update comparison link
           echo "" >> CHANGELOG.md
-          echo "[${{ needs.prepare-release.outputs.version }}]: https://github.com/SecDev-Lab/sprout/compare/v${{ needs.prepare-release.outputs.version }}...HEAD" >> CHANGELOG.md
-          sed -i "s|\[Unreleased\]:.*|[Unreleased]: https://github.com/SecDev-Lab/sprout/compare/v${{ needs.prepare-release.outputs.version }}...HEAD|" CHANGELOG.md
+          echo "[${{ needs.prepare-release.outputs.version }}]: https://github.com/AgenticSec/sprout/compare/v${{ needs.prepare-release.outputs.version }}...HEAD" >> CHANGELOG.md
+          sed -i "s|\[Unreleased\]:.*|[Unreleased]: https://github.com/AgenticSec/sprout/compare/v${{ needs.prepare-release.outputs.version }}...HEAD|" CHANGELOG.md
       
       - name: Commit version updates
         run: |
@@ -272,7 +272,7 @@ jobs:
             
             ---
             
-            **Full Changelog**: https://github.com/SecDev-Lab/sprout/compare/v0.1.0...v${{ needs.prepare-release.outputs.version }}
+            **Full Changelog**: https://github.com/AgenticSec/sprout/compare/v0.1.0...v${{ needs.prepare-release.outputs.version }}
           draft: false
           prerelease: ${{ github.event.inputs.prerelease == 'true' }}
           files: |
