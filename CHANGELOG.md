@@ -10,6 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 ### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.8.0] - 2026-06-08
+
+### Added
+
+### Changed
 - Migrated the package's PyPI publishing account and GitHub organization references from SecDev-Lab to AgenticSec (package author and project URLs now point to AgenticSec)
 
 ### Deprecated
@@ -123,7 +137,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI/CD pipeline with GitHub Actions
 - Support for Python 3.11, 3.12, and 3.13
 
-[Unreleased]: https://github.com/AgenticSec/sprout/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/AgenticSec/sprout/compare/v0.8.0...HEAD
 [0.2.0]: https://github.com/AgenticSec/sprout/compare/v0.2.0...HEAD
 
 [0.3.0]: https://github.com/AgenticSec/sprout/compare/v0.3.0...HEAD
@@ -135,3 +149,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [0.6.0]: https://github.com/AgenticSec/sprout/compare/v0.6.0...HEAD
 
 [0.7.0]: https://github.com/AgenticSec/sprout/compare/v0.7.0...HEAD
+
+[0.8.0]: https://github.com/AgenticSec/sprout/compare/v0.8.0...HEAD
