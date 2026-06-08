@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 ### Changed
+- Migrated the package's PyPI publishing account and GitHub organization references from SecDev-Lab to AgenticSec (package author and project URLs now point to AgenticSec)
 
 ### Deprecated
 
