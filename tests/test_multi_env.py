@@ -4,6 +4,7 @@ import subprocess
 
 from typer.testing import CliRunner
 
+import sprout.utils
 from sprout.cli import app
 from sprout.utils import get_used_ports
 
@@ -145,6 +146,28 @@ PORT2={{ auto_port() }}
 
         # Ensure no overlap
         assert len(ports1.intersection(ports2)) == 0, "Ports should not overlap between worktrees"
+
+    def test_create_scans_the_workspace_once(self, git_repo, monkeypatch, mocker):  # noqa: F811
+        """Test one create walks the worktrees once, not once per port."""
+        git_repo, _default_branch = git_repo
+        monkeypatch.chdir(git_repo)
+        monkeypatch.setenv("API_KEY", "test_key")  # Set env var for root .env.example
+
+        service = git_repo / "service"
+        service.mkdir()
+        (service / ".env.example").write_text(
+            "P1={{ auto_port() }}\nP2={{ auto_port() }}\nP3={{ auto_port() }}\n"
+        )
+        subprocess.run(["git", "add", "."], cwd=git_repo, check=True)
+        subprocess.run(["git", "commit", "-m", "Add service"], cwd=git_repo, check=True)
+
+        # Every scan funnels through iter_env_files, whichever module asked for it
+        spy = mocker.spy(sprout.utils, "iter_env_files")
+
+        result = runner.invoke(app, ["create", "scan-once"])
+
+        assert result.exit_code == 0
+        assert spy.call_count == 1
 
     def test_nested_directory_structure(self, git_repo, monkeypatch):  # noqa: F811
         """Test handling of nested directory structures."""

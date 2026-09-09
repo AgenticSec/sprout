@@ -159,9 +159,9 @@ sprout create existing-feature
 
 sprout intelligently manages ports to avoid conflicts:
 
-- Scans existing `.sprout/*/` directories for used ports
+- Scans the `.env` files of existing `.sprout/*/` worktrees for used ports, skipping dependency and cache directories (`node_modules`, `.venv`, `.git`, and similar)
 - Checks system port availability
-- Automatically assigns ports starting from 3000
+- Assigns a free port from the 1024-65535 range
 - Each `{{ auto_port() }}` gets a unique port
 
 Example with multiple services:
