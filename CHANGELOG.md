@@ -10,12 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 ### Changed
+- Port scanning now skips dependency, cache and VCS directories (`node_modules`, `.venv`, `.git`, `__pycache__`, and similar) when collecting used ports, so ports are no longer reserved from `.env` files that sprout did not generate
+- `find_available_port()` accepts an optional set of already-used ports, letting callers scan the workspace once instead of once per allocated port
 
 ### Deprecated
 
 ### Removed
 
 ### Fixed
+- `sprout create` no longer rescans every worktree for each `{{ auto_port() }}` placeholder. On a workspace with 8 auto-assigned ports and ~490k files under `.sprout/`, the `.env` generation step dropped from 97s to 2s
 
 ### Security
 

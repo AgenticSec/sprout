@@ -168,6 +168,7 @@ sprout supports three types of placeholders in `.env.example`:
    - Avoids conflicts across ALL services in ALL sprout environments
    - Checks system port availability
    - Ensures global uniqueness even in monorepo setups
+   - Collects used ports from the `.env` files of every worktree, skipping dependency and cache directories (`node_modules`, `.venv`, `.git`, ...)
 
 3. **Branch Name**: `{{ branch() }}`
    - Replaced with the current branch/subtree name

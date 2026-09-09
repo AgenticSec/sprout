@@ -137,6 +137,36 @@ class TestPortUtils:
         with pytest.raises(SproutError, match="Could not find an available port"):
             find_available_port()
 
+    def test_get_used_ports_skips_dependency_directories(self, tmp_path, mocker):
+        """Test get_used_ports ignores .env files under dependency directories."""
+        mocker.patch("sprout.utils.get_sprout_dir", return_value=tmp_path)
+
+        (tmp_path / "branch1").mkdir()
+        (tmp_path / "branch1" / ".env").write_text("WEB_PORT=8080")
+
+        # Dependency and cache trees can ship their own .env files, and walking
+        # them is what made port allocation slow on large worktrees.
+        vendored = tmp_path / "branch1" / "node_modules" / "some-package"
+        vendored.mkdir(parents=True)
+        (vendored / ".env").write_text("VENDOR_PORT=9999")
+
+        virtualenv = tmp_path / "branch1" / ".venv" / "lib"
+        virtualenv.mkdir(parents=True)
+        (virtualenv / ".env").write_text("VENV_PORT=9998")
+
+        assert get_used_ports() == {8080}
+
+    def test_find_available_port_accepts_precomputed_ports(self, mocker):
+        """Test find_available_port skips the workspace scan when given ports."""
+        scan = mocker.patch("sprout.utils.get_used_ports", return_value=set())
+        mocker.patch("sprout.utils.is_port_available", return_value=True)
+        mocker.patch("random.randint", side_effect=[8080, 8081])
+
+        port = find_available_port({8080})
+
+        assert port == 8081
+        scan.assert_not_called()
+
 
 class TestEnvTemplateParser:
     """Test .env template parsing."""
@@ -150,6 +180,36 @@ class TestEnvTemplateParser:
 
         result = parse_env_template(template)
         assert result == "WEB_PORT=8080\nAPI_PORT=3000"
+
+    def test_parse_env_template_scans_workspace_once(self, tmp_path, mocker):
+        """Test the workspace is scanned once, not once per auto_port()."""
+        scan = mocker.patch("sprout.utils.get_used_ports", return_value=set())
+        mocker.patch("sprout.utils.is_port_available", return_value=True)
+        mocker.patch("random.randint", side_effect=[8080, 8081, 8082])
+
+        template = tmp_path / ".env.example"
+        template.write_text(
+            "A_PORT={{ auto_port() }}\nB_PORT={{ auto_port() }}\nC_PORT={{ auto_port() }}"
+        )
+
+        result = parse_env_template(template)
+
+        assert result == "A_PORT=8080\nB_PORT=8081\nC_PORT=8082"
+        assert scan.call_count == 1
+
+    def test_parse_env_template_reuses_given_used_ports(self, tmp_path, mocker):
+        """Test a caller-supplied port set replaces the workspace scan."""
+        scan = mocker.patch("sprout.utils.get_used_ports", return_value=set())
+        mocker.patch("sprout.utils.is_port_available", return_value=True)
+        mocker.patch("random.randint", side_effect=[8080, 8081])
+
+        template = tmp_path / ".env.example"
+        template.write_text("WEB_PORT={{ auto_port() }}")
+
+        result = parse_env_template(template, used_ports={8080})
+
+        assert result == "WEB_PORT=8081"
+        scan.assert_not_called()
 
     def test_parse_env_template_variable_from_env(self, tmp_path, mocker):
         """Test parsing {{ VARIABLE }} from environment."""
