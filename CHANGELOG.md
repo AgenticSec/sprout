@@ -10,6 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 ### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.9.0] - 2026-09-10
+
+### Added
+
+### Changed
 - Port scanning now skips dependency, cache and VCS directories (`node_modules`, `.venv`, `.git`, `__pycache__`, and similar) when collecting used ports, so ports are no longer reserved from `.env` files that sprout did not generate. A directory whose name is on that list is still walked when it is a worktree root, so a branch named `venv` keeps its own ports reserved
 - `find_available_port()` accepts an optional set of already-used ports, letting callers scan the workspace once instead of once per allocated port
 - `parse_env_template()` treats its `used_ports` argument as a replacement for the workspace scan rather than an addition to it, and scans the workspace only when the template actually contains `{{ auto_port() }}`
@@ -141,7 +155,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI/CD pipeline with GitHub Actions
 - Support for Python 3.11, 3.12, and 3.13
 
-[Unreleased]: https://github.com/AgenticSec/sprout/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/AgenticSec/sprout/compare/v0.9.0...HEAD
 [0.2.0]: https://github.com/AgenticSec/sprout/compare/v0.2.0...HEAD
 
 [0.3.0]: https://github.com/AgenticSec/sprout/compare/v0.3.0...HEAD
@@ -155,3 +169,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [0.7.0]: https://github.com/AgenticSec/sprout/compare/v0.7.0...HEAD
 
 [0.8.0]: https://github.com/AgenticSec/sprout/compare/v0.8.0...HEAD
+
+[0.9.0]: https://github.com/AgenticSec/sprout/compare/v0.9.0...HEAD
