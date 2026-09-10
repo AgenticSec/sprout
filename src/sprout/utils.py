@@ -5,6 +5,7 @@ import random
 import re
 import socket
 import subprocess
+from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
 from typing import TypeAlias
@@ -18,6 +19,27 @@ from sprout.types import BranchName, WorktreeInfo
 # Type aliases
 PortNumber: TypeAlias = int
 PortSet: TypeAlias = set[PortNumber]
+
+# Directory names skipped when scanning worktrees for .env files. These hold
+# dependencies, caches and VCS internals, never a .env that sprout generated,
+# but they can each contain tens of thousands of files. Descending into them
+# turns a port scan into a multi-second walk on a real workspace.
+SCAN_EXCLUDED_DIRS: frozenset[str] = frozenset(
+    {
+        ".direnv",
+        ".git",
+        ".mypy_cache",
+        ".next",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".terraform",
+        ".tox",
+        ".venv",
+        "__pycache__",
+        "node_modules",
+        "venv",
+    }
+)
 
 console = Console()
 
@@ -75,6 +97,45 @@ def ensure_sprout_dir() -> Path:
     return sprout_dir
 
 
+def _is_worktree_root(path: Path) -> bool:
+    """Check whether a directory is a git worktree root.
+
+    Args:
+        path: Directory to inspect.
+    """
+    # git worktree add always leaves a .git entry: a file in a linked worktree,
+    # a directory in a main checkout.
+    return (path / ".git").exists()
+
+
+def iter_env_files(root: Path) -> Iterator[Path]:
+    """Yield .env files under root, skipping dependency and cache directories.
+
+    An excluded name is still walked when the directory is a worktree root:
+    a branch named "venv" or "fix/venv" puts a real worktree behind an excluded
+    name, and skipping it would hand its ports out to the next worktree.
+
+    Args:
+        root: Directory to walk.
+
+    Yields:
+        Paths of the .env files found under root.
+    """
+    for dir_path, dir_names, file_names in os.walk(root):
+        # Prune in place so os.walk does not descend into excluded directories
+        dir_names[:] = [
+            name
+            for name in dir_names
+            if name not in SCAN_EXCLUDED_DIRS or _is_worktree_root(Path(dir_path) / name)
+        ]
+        for file_name in file_names:
+            if file_name.endswith(".env"):
+                env_file = Path(dir_path) / file_name
+                # Only regular files: a fifo named .env would block read_text()
+                if env_file.is_file():
+                    yield env_file
+
+
 def get_used_ports() -> PortSet:
     """Get all ports currently used by sprout worktrees."""
     used_ports: PortSet = set()
@@ -84,18 +145,17 @@ def get_used_ports() -> PortSet:
         return used_ports
 
     # Scan all .env files recursively in .sprout/
-    for env_file in sprout_dir.rglob("*.env"):
-        if env_file.is_file():
-            try:
-                content = env_file.read_text()
-                # Find all port assignments (e.g., PORT=8080)
-                port_matches = re.findall(r"=(\d{4,5})\b", content)
-                for port_str in port_matches:
-                    port = int(port_str)
-                    if 1024 <= port <= 65535:
-                        used_ports.add(port)
-            except (OSError, ValueError):
-                continue
+    for env_file in iter_env_files(sprout_dir):
+        try:
+            content = env_file.read_text()
+            # Find all port assignments (e.g., PORT=8080)
+            port_matches = re.findall(r"=(\d{4,5})\b", content)
+            for port_str in port_matches:
+                port = int(port_str)
+                if 1024 <= port <= 65535:
+                    used_ports.add(port)
+        except (OSError, ValueError):
+            continue
 
     return used_ports
 
@@ -110,9 +170,18 @@ def is_port_available(port: PortNumber) -> bool:
             return False
 
 
-def find_available_port() -> PortNumber:
-    """Find an available port that's not used by sprout or system."""
-    used_ports = get_used_ports()
+def find_available_port(used_ports: PortSet | None = None) -> PortNumber:
+    """Find an available port that's not used by sprout or system.
+
+    Args:
+        used_ports: Ports to treat as taken, replacing the workspace scan rather
+            than adding to it. Scanning every worktree is the expensive part of
+            this call, so callers that allocate several ports in a row should
+            scan once and pass the result instead of paying for a fresh walk per
+            port. An empty set means nothing is taken; pass None to scan.
+    """
+    if used_ports is None:
+        used_ports = get_used_ports()
     max_attempts = 1000
 
     for _ in range(max_attempts):
@@ -136,7 +205,11 @@ def parse_env_template(
     Args:
         template_path: Path to the .env.example template file
         silent: If True, use stderr for prompts to keep stdout clean
-        used_ports: Set of ports already in use (in addition to system-wide used ports)
+        used_ports: Ports already in use across the workspace. The set replaces
+            the workspace scan rather than adding to it, so passing a partial
+            set silently gives up collision detection against the other
+            worktrees. An empty set means nothing is taken; omit it to have this
+            function scan once, and only if the template asks for a port.
         branch_name: Branch name to use for {{ branch() }} placeholders
     """
     if not template_path.exists():
@@ -148,11 +221,12 @@ def parse_env_template(
         raise SproutError(f"Failed to read .env.example: {e}") from e
 
     lines: list[str] = []
-    # Track used ports within this file to avoid duplicates
-    file_ports: PortSet = set()
-    # Include any additional used ports passed in
-    if used_ports:
-        file_ports.update(used_ports)
+    # Ports that {{ auto_port() }} must avoid: the ones already taken across the
+    # workspace plus the ones handed out earlier in this file. Left as None
+    # until the first port is requested, so a template without auto_port() -
+    # and every caller that already knows the used ports - never walks the
+    # worktrees. Once filled, it is reused for the rest of the file.
+    file_ports: PortSet | None = set(used_ports) if used_ports is not None else None
 
     for line in content.splitlines():
         # Process {{ auto_port() | default }} placeholders
@@ -162,10 +236,13 @@ def parse_env_template(
             if default_value is not None:
                 default_value = default_value.strip()
 
-            # Generate available port
-            port = find_available_port()
-            while port in file_ports:
-                port = find_available_port()
+            # Generate available port. Scan the worktrees on the first
+            # placeholder only; from then on file_ports carries both those
+            # ports and the ones assigned earlier in this file.
+            nonlocal file_ports
+            if file_ports is None:
+                file_ports = get_used_ports()
+            port = find_available_port(file_ports)
             file_ports.add(port)
             return str(port)
 

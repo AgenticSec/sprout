@@ -10,12 +10,14 @@ import pytest
 
 from sprout.exceptions import SproutError
 from sprout.utils import (
+    SCAN_EXCLUDED_DIRS,
     branch_exists,
     find_available_port,
     get_git_root,
     get_used_ports,
     is_git_repository,
     is_port_available,
+    iter_env_files,
     parse_env_template,
     run_command,
     worktree_exists,
@@ -100,6 +102,36 @@ class TestPortUtils:
         ports = get_used_ports()
         assert ports == set()
 
+    def test_get_used_ports_skips_dependency_directories(self, tmp_path, mocker):
+        """Test get_used_ports ignores .env files under dependency directories."""
+        mocker.patch("sprout.utils.get_sprout_dir", return_value=tmp_path)
+
+        (tmp_path / "branch1").mkdir()
+        (tmp_path / "branch1" / ".env").write_text("WEB_PORT=8080")
+
+        # Dependency and cache trees can ship their own .env files, and walking
+        # them is what made port allocation slow on large worktrees.
+        vendored = tmp_path / "branch1" / "node_modules" / "some-package"
+        vendored.mkdir(parents=True)
+        (vendored / ".env").write_text("VENDOR_PORT=9999")
+
+        virtualenv = tmp_path / "branch1" / ".venv" / "lib"
+        virtualenv.mkdir(parents=True)
+        (virtualenv / ".env").write_text("VENV_PORT=9998")
+
+        assert get_used_ports() == {8080}
+
+    def test_get_used_ports_ignores_unreadable_files(self, tmp_path, mocker):
+        """Test a .env that cannot be read is skipped, not fatal."""
+        mocker.patch("sprout.utils.get_sprout_dir", return_value=tmp_path)
+
+        (tmp_path / "branch1").mkdir()
+        (tmp_path / "branch1" / ".env").write_text("WEB_PORT=8080")
+        # Dangling symlink: reported by the walk, unreadable when opened
+        (tmp_path / "branch1" / "broken.env").symlink_to(tmp_path / "gone" / ".env")
+
+        assert get_used_ports() == {8080}
+
     def test_is_port_available_true(self):
         """Test is_port_available returns True for free port."""
         # Find a likely free port
@@ -137,6 +169,93 @@ class TestPortUtils:
         with pytest.raises(SproutError, match="Could not find an available port"):
             find_available_port()
 
+    def test_find_available_port_accepts_precomputed_ports(self, mocker):
+        """Test find_available_port skips the workspace scan when given ports."""
+        scan = mocker.patch("sprout.utils.get_used_ports", return_value=set())
+        mocker.patch("sprout.utils.is_port_available", return_value=True)
+        mocker.patch("random.randint", side_effect=[8080, 8081])
+
+        port = find_available_port({8080})
+
+        assert port == 8081
+        scan.assert_not_called()
+
+    def test_find_available_port_empty_set_is_not_a_rescan(self, mocker):
+        """Test an empty set means 'nothing taken', not 'go and scan'."""
+        scan = mocker.patch("sprout.utils.get_used_ports", return_value={8080})
+        mocker.patch("sprout.utils.is_port_available", return_value=True)
+        mocker.patch("random.randint", side_effect=[8080])
+
+        assert find_available_port(set()) == 8080
+        scan.assert_not_called()
+
+
+class TestIterEnvFiles:
+    """Test the .env discovery walk."""
+
+    # Spelled out rather than derived from SCAN_EXCLUDED_DIRS: deriving it would
+    # make the test shrink along with the constant instead of failing.
+    EXCLUDED_DIRS = [
+        ".direnv",
+        ".git",
+        ".mypy_cache",
+        ".next",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".terraform",
+        ".tox",
+        ".venv",
+        "__pycache__",
+        "node_modules",
+        "venv",
+    ]
+
+    def test_excluded_dirs_constant_is_in_sync(self):
+        """Test the spelled-out list still matches the implementation."""
+        assert set(self.EXCLUDED_DIRS) == SCAN_EXCLUDED_DIRS
+
+    @pytest.mark.parametrize("excluded", EXCLUDED_DIRS)
+    def test_iter_env_files_skips_excluded_directory(self, tmp_path, excluded):
+        """Test each excluded directory is left unwalked."""
+        (tmp_path / "worktree").mkdir()
+        (tmp_path / "worktree" / ".env").write_text("PORT=8080")
+
+        buried = tmp_path / "worktree" / excluded / "nested"
+        buried.mkdir(parents=True)
+        (buried / ".env").write_text("PORT=9999")
+
+        assert list(iter_env_files(tmp_path)) == [tmp_path / "worktree" / ".env"]
+
+    @pytest.mark.parametrize("excluded", EXCLUDED_DIRS)
+    def test_iter_env_files_walks_worktree_named_after_excluded_dir(self, tmp_path, excluded):
+        """Test a worktree is walked even when its name is on the exclude list."""
+        # A branch named e.g. "venv" or "fix/venv" puts a real worktree behind an
+        # excluded name; its ports must still be collected.
+        worktree = tmp_path / excluded
+        worktree.mkdir()
+        (worktree / ".git").write_text("gitdir: /somewhere/.git/worktrees/venv\n")
+        (worktree / ".env").write_text("PORT=8080")
+
+        assert list(iter_env_files(tmp_path)) == [worktree / ".env"]
+
+    def test_iter_env_files_matches_suffixed_names(self, tmp_path):
+        """Test names ending in .env are matched, as rglob('*.env') did."""
+        (tmp_path / ".env").write_text("A=1")
+        (tmp_path / "local.env").write_text("B=2")
+        (tmp_path / "env").write_text("C=3")
+        (tmp_path / "notes.txt").write_text("D=4")
+
+        assert {path.name for path in iter_env_files(tmp_path)} == {".env", "local.env"}
+
+    @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="requires mkfifo")
+    def test_iter_env_files_skips_non_regular_files(self, tmp_path):
+        """Test a fifo named .env is skipped instead of blocking a read."""
+        os.mkfifo(tmp_path / ".env")
+        (tmp_path / "real").mkdir()
+        (tmp_path / "real" / ".env").write_text("PORT=8080")
+
+        assert list(iter_env_files(tmp_path)) == [tmp_path / "real" / ".env"]
+
 
 class TestEnvTemplateParser:
     """Test .env template parsing."""
@@ -150,6 +269,70 @@ class TestEnvTemplateParser:
 
         result = parse_env_template(template)
         assert result == "WEB_PORT=8080\nAPI_PORT=3000"
+
+    def test_parse_env_template_scans_workspace_once(self, tmp_path, mocker):
+        """Test the workspace is scanned once, not once per auto_port()."""
+        scan = mocker.patch("sprout.utils.get_used_ports", return_value=set())
+        mocker.patch("sprout.utils.is_port_available", return_value=True)
+        mocker.patch("random.randint", side_effect=[8080, 8081, 8082])
+
+        template = tmp_path / ".env.example"
+        template.write_text(
+            "A_PORT={{ auto_port() }}\nB_PORT={{ auto_port() }}\nC_PORT={{ auto_port() }}"
+        )
+
+        result = parse_env_template(template)
+
+        assert result == "A_PORT=8080\nB_PORT=8081\nC_PORT=8082"
+        assert scan.call_count == 1
+
+    def test_parse_env_template_reuses_given_used_ports(self, tmp_path, mocker):
+        """Test a caller-supplied port set replaces the workspace scan."""
+        scan = mocker.patch("sprout.utils.get_used_ports", return_value=set())
+        mocker.patch("sprout.utils.is_port_available", return_value=True)
+        mocker.patch("random.randint", side_effect=[8080, 8081])
+
+        template = tmp_path / ".env.example"
+        template.write_text("WEB_PORT={{ auto_port() }}")
+
+        result = parse_env_template(template, used_ports={8080})
+
+        assert result == "WEB_PORT=8081"
+        scan.assert_not_called()
+
+    def test_parse_env_template_empty_used_ports_is_not_a_rescan(self, tmp_path, mocker):
+        """Test an empty port set is taken at face value, not as 'unscanned'."""
+        scan = mocker.patch("sprout.utils.get_used_ports", return_value={8080})
+        mocker.patch("sprout.utils.is_port_available", return_value=True)
+        mocker.patch("random.randint", side_effect=[8080])
+
+        template = tmp_path / ".env.example"
+        template.write_text("WEB_PORT={{ auto_port() }}")
+
+        assert parse_env_template(template, used_ports=set()) == "WEB_PORT=8080"
+        scan.assert_not_called()
+
+    def test_parse_env_template_without_auto_port_does_not_scan(self, tmp_path, mocker):
+        """Test a template with no auto_port() never touches the workspace."""
+        scan = mocker.patch("sprout.utils.get_used_ports", return_value=set())
+
+        template = tmp_path / ".env.example"
+        template.write_text("NAME=static\nURL=${HOST}/path")
+
+        assert parse_env_template(template) == "NAME=static\nURL=${HOST}/path"
+        scan.assert_not_called()
+
+    def test_parse_env_template_never_repeats_a_port_within_a_file(self, tmp_path, mocker):
+        """Test a port assigned earlier in the file is excluded from later draws."""
+        mocker.patch("sprout.utils.get_used_ports", return_value=set())
+        mocker.patch("sprout.utils.is_port_available", return_value=True)
+        # The same port is drawn twice; the second placeholder must reject it
+        mocker.patch("random.randint", side_effect=[8080, 8080, 8081])
+
+        template = tmp_path / ".env.example"
+        template.write_text("A={{ auto_port() }}\nB={{ auto_port() }}")
+
+        assert parse_env_template(template) == "A=8080\nB=8081"
 
     def test_parse_env_template_variable_from_env(self, tmp_path, mocker):
         """Test parsing {{ VARIABLE }} from environment."""
